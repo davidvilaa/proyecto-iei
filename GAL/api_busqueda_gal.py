@@ -1,5 +1,6 @@
 ﻿# src/gal/api_busqueda_gal.py
 from __future__ import annotations
+from fastapi.middleware.cors import CORSMiddleware
 
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
@@ -13,6 +14,14 @@ app = FastAPI(
     title="Microservicio GAL - API de búsqueda",
     version="1.0.0",
     description="API de búsqueda y datos crudos para Galicia."
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite peticiones desde cualquier origen (frontend)
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
+    allow_headers=["*"],
 )
 
 CSV_FILE = Path("Estacions_ITV.csv") # O la ruta donde esté tu CSV/JSON real

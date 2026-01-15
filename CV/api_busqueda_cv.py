@@ -1,11 +1,20 @@
 ﻿# src/cv/api_busqueda_cv.py
 from __future__ import annotations
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from .wrapper_cv import leer_cv_json
 
 app = FastAPI(title="Microservicio CV")
 JSON_FILE = Path("estaciones.json") # Asegúrate que la ruta sea correcta relativa a la ejecución
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite peticiones desde cualquier origen (frontend)
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
+    allow_headers=["*"],
+)
 
 # --- ENDPOINT EXISTENTE (Para el extractor) ---
 @app.get("/cv/records")

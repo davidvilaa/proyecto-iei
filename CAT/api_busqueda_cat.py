@@ -1,4 +1,5 @@
 ﻿# src/cat/api_busqueda_cat.py
+from fastapi.middleware.cors import CORSMiddleware
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,6 +12,14 @@ app = FastAPI(
     title="Microservicio CAT - API de búsqueda",
     version="1.0.0",
     description="API de búsqueda y datos crudos para Catalunya."
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite peticiones desde cualquier origen (frontend)
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
+    allow_headers=["*"],
 )
 
 XML_FILE = Path("ITV-CAT.xml")
