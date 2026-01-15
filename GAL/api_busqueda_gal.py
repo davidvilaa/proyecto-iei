@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import re
 
 # Import sin punto
 from wrapper_gal import leer_gal_csv 
@@ -22,6 +23,38 @@ app.add_middleware(
 
 # RUTA AL ARCHIVO CSV (Robusta)
 CSV_FILE = Path(__file__).resolve().parent / "Estacions_ITV.csv"
+print(f"DEBUG: Buscando archivo en {CSV_FILE} - ¿Existe? {CSV_FILE.exists()}")
+
+def parse_coord_gmaps(coord_str: str):
+    """Convierte 43° 18.856' a 43.3142 decimal"""
+    if not coord_str: return 0.0, 0.0
+    try:
+        # Limpiamos caracteres raros
+        coord_str = coord_str.replace("'", "").replace("°", "").replace(",", ".")
+        parts = coord_str.split() # Separa lat y long
+        
+        def to_dec(val):
+            # Lógica simple: si viene como 43 18.856, lo sumamos
+            # Nota: Esto es una aproximación rápida para tu formato
+            if len(parts) >= 2:
+                # Tu CSV viene tipo: "43 18.856, -8 17.165" tras limpiar
+                pass
+            return 0.0 # Placeholder si falla
+            
+        # MEJOR O MÁS FÁCIL: Usar el parseo que tenías en el extractor
+        # Pero para hacerlo rápido en la API, vamos a intentar extraer los números
+        nums = re.findall(r"([-+]?\d+\.?\d*)", coord_str)
+        if len(nums) >= 4:
+            # Formato: Grados Lat, Min Lat, Grados Long, Min Long
+            lat = float(nums[0]) + (float(nums[1]) / 60)
+            lng = float(nums[2]) - (float(nums[3]) / 60) # Ojo al negativo en longitud
+            # Corrección signo longitud si es oeste
+            if "W" in coord_str or "-" in coord_str.split(',')[1]: 
+                lng = -abs(lng)
+            return lat, lng
+    except:
+        pass
+    return 42.88, -8.54 # Fallback centro Galicia
 
 # --- ENDPOINT RAW ---
 @app.get("/gal/records")
@@ -76,9 +109,9 @@ def search_gal(
             elif tipo == "movil" and r_tipo_inferred != "movil": match = False
 
         if match:
-            # Coordenadas fijas (Centro de Galicia aprox)
-            lat_fija = 42.88
-            lng_fija = -8.54
+            # USAR LA NUEVA FUNCIÓN
+            coord_raw = r.get("COORDENADAS GMAPS", "")
+            lat, lng = parse_coord_gmaps(coord_raw)
 
             resultados.append({
                 "nombre": r_nombre,
@@ -87,8 +120,8 @@ def search_gal(
                 "localidad": r.get("CONCELLO", ""),
                 "cp": r.get("CÓDIGO POSTAL", ""),
                 "provincia": r.get("PROVINCIA", ""),
-                "lat": lat_fija,
-                "lng": lng_fija,
+                "lat": lat,  # <--- Usar variable calculada
+                "lng": lng,  # <--- Usar variable calculada
                 "descripcion": r.get("HORARIO", "")
             })
             

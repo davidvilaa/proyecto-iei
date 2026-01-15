@@ -23,6 +23,7 @@ app.add_middleware(
 # RUTA AL ARCHIVO XML
 # Usamos .parent para que busque "ITV-CAT.xml" en la carpeta CAT, no en la raíz
 XML_FILE = Path(__file__).resolve().parent / "ITV-CAT.xml"
+print(f"DEBUG: Buscando archivo en {XML_FILE} - ¿Existe? {XML_FILE.exists()}")
 
 # --- ENDPOINT RAW ---
 @app.get("/cat/records")

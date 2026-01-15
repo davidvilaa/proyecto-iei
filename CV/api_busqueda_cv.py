@@ -23,6 +23,18 @@ app.add_middleware(
 # RUTA AL ARCHIVO JSON (Robusta)
 # Busca 'estaciones.json' en la carpeta CV, sin importar desde dónde ejecutes el script
 JSON_FILE = Path(__file__).resolve().parent / "estaciones.json"
+print(f"DEBUG: Buscando archivo en {JSON_FILE} - ¿Existe? {JSON_FILE.exists()}")
+
+COORD_MAPPING = {
+    "Vila-real": (39.937, -0.098),
+    "Vinaròs": (40.468, 0.465),
+    "Massalfassar": (39.560, -0.310),
+    "Llíria": (39.626, -0.594),
+    "Orihuela": (38.083, -0.944),
+    "Alcoy": (38.705, -0.474),
+    # Fallback para móviles
+    "Móvil": (39.469, -0.376) 
+}
 
 # --- ENDPOINT RAW ---
 @app.get("/cv/records")
@@ -73,19 +85,23 @@ def search_cv(
             elif tipo == "movil" and "móvil" not in r_tipo and "movil" not in r_tipo: match = False
 
         if match:
-            # Coordenadas fijas (Centro de Valencia por defecto)
-            lat_fija = 39.4699
-            lng_fija = -0.3763
+            # 2. BUSCAR COORDENADA POR MUNICIPIO
+            municipio = r.get('MUNICIPIO', 'Desconocido')
+            lat_fija, lng_fija = COORD_MAPPING.get(municipio, COORD_MAPPING["Móvil"])
+
+            # Si es móvil y no tiene municipio, intenta variar un poco para que no se pisen
+            if "Móvil" in str(r.get("TIPO ESTACIÓN")):
+                 lat_fija += 0.01 # Pequeño desplazamiento
 
             resultados.append({
-                "nombre": f"ITV {r.get('MUNICIPIO', 'Desconocido')}",
+                "nombre": f"ITV {municipio}",
                 "tipo": r.get("TIPO ESTACIÓN", "Fija"),
                 "direccion": r.get("DIRECCIÓN", ""),
-                "localidad": r.get("MUNICIPIO", ""),
+                "localidad": municipio,
                 "cp": str(r.get("C.POSTAL", "")),
                 "provincia": r.get("PROVINCIA", ""),
-                "lat": lat_fija,
-                "lng": lng_fija
+                "lat": lat_fija, # <--- Usar coordenada mapeada
+                "lng": lng_fija  # <--- Usar coordenada mapeada
             })
             
     return {"status": "success", "results": resultados}
