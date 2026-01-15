@@ -304,6 +304,26 @@ def main():
                 if not (-90.0 <= latitud <= 90.0) or not (-180.0 <= longitud <= 180.0):
                     latitud, longitud = "", ""
 
+            if not provincia_nombre:
+                print(f"[WARN] Registro {i}: Se omite por falta de PROVINCIA.")
+                continue
+            
+            if not tiene_concello: # Esto valida que exista localidad/municipio
+                print(f"[WARN] Registro {i}: Se omite por falta de MUNICIPIO/CONCELLO.")
+                continue
+
+            if not (cp_valido and raw_cp):
+                print(f"[WARN] Registro {i}: Se omite por falta de CÓDIGO POSTAL válido.")
+                continue
+
+            tipo_asignado = "Estación_fija" 
+            
+            tiene_coords = (latitud != "" and longitud != "")
+            
+            if tipo_asignado != "Estación_movil" and not tiene_coords:
+                 print(f"[WARN] Registro {i}: Se omite estación FIJA sin coordenadas válidas.")
+                 continue
+
             cod_estacion = f"{estacion_counter:05d}"
             estacion_counter += 1
 
@@ -314,7 +334,7 @@ def main():
                 "codigo_postal": raw_cp if cp_valido else "",
                 "longitud": longitud,
                 "latitud": latitud,
-                "tipo": "Estación_fija",
+                "tipo": tipo_asignado,
                 "descripcion": descripcion,
                 "horario": raw_horario or "Consultar web",
                 "contacto": raw_correo or "N/A",

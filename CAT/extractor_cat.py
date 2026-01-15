@@ -285,6 +285,28 @@ def main():
                 descripcion = "ITV General"
 
             contacto_final = raw_tel if raw_tel else ajustar_contacto(raw_correo)
+
+            if not provincia_nombre:
+                print(f"[WARN] Registro {i}: Se omite por falta de PROVINCIA.")
+                continue
+
+            if not tiene_municipio:
+                print(f"[WARN] Registro {i}: Se omite por falta de MUNICIPIO.")
+                continue
+
+            # Nota: en tu código original, si cp_valido es False, no guardabas el CP.
+            # Ahora, si no es válido o está vacío, descartamos toda la estación.
+            if not cp_valido or not raw_cp:
+                print(f"[WARN] Registro {i}: Se omite por falta de CÓDIGO POSTAL válido.")
+                continue
+
+            tipo_asignado = "Estación_fija"
+
+            tiene_coords = (latitud != "0.0" and longitud != "0.0")
+
+            if tipo_asignado != "Estación_movil" and not tiene_coords:
+                print(f"[WARN] Registro {i}: Se omite estación FIJA sin coordenadas válidas.")
+                continue
             
             cod_estacion = f"{estacion_counter:05d}"
             estacion_counter += 1
@@ -299,7 +321,7 @@ def main():
                     "codigo_postal": raw_cp if cp_valido else "", # Ahora sí se guarda si cp_valido=True
                     "longitud": longitud,
                     "latitud": latitud,
-                    "tipo": "Estación_fija",
+                    "tipo": tipo_asignado,
                     "descripcion": descripcion,
                     "horario": traducir_horario(raw_horario),
                     "contacto": contacto_final,

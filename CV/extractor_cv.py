@@ -289,6 +289,25 @@ def main():
 
             tipo = mapear_tipo(get_first(registro, ["TIPO ESTACIÓN", "TIPO ESTACION", "TIPO ESTACI?N"], "") or "")
 
+            if not provincia_name:
+                print(f"[WARN] Registro {i}: Se omite por falta de PROVINCIA.")
+                continue
+
+            if not tiene_municipio:
+                print(f"[WARN] Registro {i}: Se omite por falta de MUNICIPIO.")
+                continue
+
+            # cp_valido se calculó arriba en tu script
+            if not cp_valido or not cp_str:
+                print(f"[WARN] Registro {i}: Se omite por falta de CÓDIGO POSTAL válido.")
+                continue
+
+            tiene_coords = (latitud not in ["0", ""] and longitud not in ["0", ""])
+
+            if tipo != "Estación_movil" and not tiene_coords:
+                print(f"[WARN] Registro {i}: Se omite estación FIJA ({tipo}) sin coordenadas.")
+                continue
+
             if not tiene_municipio:
                 nombre_estacion = ""
                 descripcion_estacion = ""
