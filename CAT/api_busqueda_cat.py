@@ -1,38 +1,41 @@
 ﻿# src/cat/api_busqueda_cat.py
-from fastapi.middleware.cors import CORSMiddleware
 from __future__ import annotations
 
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from .wrapper_cat import leer_cat_xml
+# IMPORT SIN EL PUNTO (Correcto para ejecución directa)
+from wrapper_cat import leer_cat_xml
 
-app = FastAPI(
-    title="Microservicio CAT - API de búsqueda",
-    version="1.0.0",
-    description="API de búsqueda y datos crudos para Catalunya."
-)
+app = FastAPI(title="Microservicio CAT - API de búsqueda")
 
+# --- CORS OBLIGATORIO ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite peticiones desde cualquier origen (frontend)
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-XML_FILE = Path("ITV-CAT.xml")
+# RUTA AL ARCHIVO XML
+# Usamos .parent para que busque "ITV-CAT.xml" en la carpeta CAT, no en la raíz
+XML_FILE = Path(__file__).resolve().parent / "ITV-CAT.xml"
 
-# --- ENDPOINT EXISTENTE (Para el extractor) ---
+# --- ENDPOINT RAW ---
 @app.get("/cat/records")
 def cat_records(limit: int | None = Query(default=None)):
+    # Verificación defensiva para no crashear si falta el archivo
+    if not XML_FILE.exists():
+        # Retornamos error 404 pero la API sigue viva
+        raise HTTPException(status_code=404, detail=f"No se encuentra el archivo: {XML_FILE.name}")
+        
     records = leer_cat_xml(XML_FILE)
-    if not records:
-        raise HTTPException(status_code=404, detail="No se encontraron registros")
     return records[:limit] if limit else records
 
-# --- NUEVO ENDPOINT (Para el buscador) ---
+# --- ENDPOINT BÚSQUEDA ---
 @app.get("/api/search/cat")
 def search_cat(
     localidad: str = "", 
@@ -40,7 +43,13 @@ def search_cat(
     cp: str = "", 
     provincia: str = ""
 ):
-    # 1. Obtener datos raw
+    print(f"🔎 Buscando en CAT: loc='{localidad}'")
+    
+    # 1. Leer datos
+    if not XML_FILE.exists():
+        print(f"⚠️ Archivo no encontrado: {XML_FILE}")
+        return {"status": "success", "results": []} # Devolvemos vacio, no error 500
+        
     records = leer_cat_xml(XML_FILE)
     
     # 2. Filtrar
@@ -50,40 +59,33 @@ def search_cat(
     provincia = provincia.lower()
     
     for r in records:
-        # Mapeo de campos específicos de CAT
+        # Mapeo específico de CAT
         r_loc = str(r.get("municipi", "")).lower()
         r_cp = str(r.get("cp", ""))
-        # En CAT, 'serveis_territorials' suele actuar como provincia administrativa
         r_prov = str(r.get("serveis_territorials", "")).lower()
         
-        # Inferencia de tipo (por defecto fija)
-        r_tipo_inferred = "fija"
-        # Si hubiera algún campo específico se usaría aquí
-
+        # Filtrado
         match = True
         if localidad and localidad not in r_loc: match = False
         if cp and cp not in r_cp: match = False
-        # Filtro provincia: a veces el usuario busca "Barcelona" y en el XML pone "Barcelona"
         if provincia and provincia not in r_prov: match = False
         
-        if tipo and tipo != r_tipo_inferred: 
-            # Si buscas 'movil' y todas son fijas, no saldrá nada, lo cual es correcto
-            match = False
-
         if match:
-            # Normalizar salida
-            # Parseo básico de coordenadas si vienen en formato string grande (ej: 41399458)
+            # Normalización de coordenadas
             lat_raw = r.get("lat", "0")
             lng_raw = r.get("long", "0")
             try:
-                lat = float(lat_raw) / 1000000 if float(lat_raw) > 1000 else float(lat_raw)
-                lng = float(lng_raw) / 1000000 if float(lng_raw) > 1000 else float(lng_raw)
+                lat = float(lat_raw)
+                lng = float(lng_raw)
+                # Ajuste si vienen sin punto decimal (ej: 41380000 -> 41.38)
+                if lat > 1000: lat /= 1000000
+                if lng > 1000: lng /= 1000000
             except:
-                lat, lng = 41.38, 2.17 # Default Barcelona
+                lat, lng = 0.0, 0.0
 
             resultados.append({
                 "nombre": r.get("denominaci", "ITV CAT"),
-                "tipo": "Fija", # Hardcoded si no hay info
+                "tipo": "Fija",
                 "direccion": r.get("adre_a", ""),
                 "localidad": r.get("municipi", ""),
                 "cp": r.get("cp", ""),
@@ -97,5 +99,5 @@ def search_cat(
 
 # --- ARRANQUE ---
 if __name__ == "__main__":
-    print("🚀 Iniciando Microservicio CAT en puerto 5020...")
+    print(f"🚀 Iniciando API CAT en puerto 5020. Leyendo: {XML_FILE}")
     uvicorn.run(app, host="127.0.0.1", port=5020)
