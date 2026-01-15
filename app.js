@@ -1,10 +1,11 @@
-// URLs APIs
+// URLs APIs ACTUALIZADAS (Puertos y rutas nuevos)
 const API_URLS = {
     search: 'http://localhost:5004/api/search',
     load: 'http://localhost:5005/api/load',
-    wrapperCAT: 'http://localhost:5001/api/wrapper-cat',
-    wrapperGAL: 'http://localhost:5002/api/wrapper-gal',
-    wrapperCV: 'http://localhost:5003/api/wrapper-cv'
+    // Actualizamos a los puertos 5020, 5030, 5010 y rutas /records
+    wrapperCAT: 'http://localhost:5020/cat/records',
+    wrapperGAL: 'http://localhost:5030/gal/records',
+    wrapperCV: 'http://localhost:5010/cv/records'
 };
 
 let map, markers = [], stationsData = [];
@@ -45,22 +46,26 @@ async function loadAllData() {
 // NORMALIZAR estación (diferentes formatos regiones)
 function normalizeStation(raw) {
     return {
-        nombre: raw.estaci || raw['NOME DA ESTACIÓN'] || raw['N ESTACIN'] || 'N/D',
-        tipo: raw.operador || raw['TIPO ESTACIÓN'] || 'Fija',
-        direccion: raw.adrea || raw.ENDEREZO || raw.DIRECCIN || 'N/D',
-        localidad: raw.municipi || raw.CONCELLO || raw.MUNICIPIO || 'N/D',
-        cp: raw.cp || raw['CÓDIGO POSTAL'] || raw['C.POSTAL'] || 'N/D',
-        provincia: raw.serveis_territorials || raw.PROVINCIA || 'N/D',
-        descripcion: raw.horari_de_servei || raw.HORARIO || raw.HORARIOS || '',
-        lat: parseCoord(raw.lat, raw.municipi || raw.CONCELLO || ''),
-        lng: parseCoord(raw.long, raw.municipi || raw.CONCELLO || '')
+        nombre: raw.estaci || raw['NOME DA ESTACIÓN'] || raw['N ESTACIN'] || raw.nombre || 'N/D',
+        tipo: raw.operador || raw['TIPO ESTACIÓN'] || raw.tipo || 'Fija',
+        direccion: raw.adrea || raw.ENDEREZO || raw.DIRECCIN || raw.direccion || 'N/D',
+        localidad: raw.municipi || raw.CONCELLO || raw.MUNICIPIO || raw.localidad || 'N/D',
+        cp: raw.cp || raw['CÓDIGO POSTAL'] || raw['C.POSTAL'] || raw.cp || 'N/D',
+        provincia: raw.serveis_territorials || raw.PROVINCIA || raw.provincia || 'N/D',
+        descripcion: raw.horari_de_servei || raw.HORARIO || raw.HORARIOS || raw.descripcion || '',
+        lat: parseCoord(raw.lat, raw.municipi || raw.CONCELLO || raw.localidad || ''),
+        lng: parseCoord(raw.long, raw.municipi || raw.CONCELLO || raw.localidad || '')
     };
 }
 
 function parseCoord(val, municipio) {
+    // Si ya es número válido, devolverlo tal cual (para las nuevas APIs)
+    if (typeof val === 'number') return val;
+    
     if (!val) return municipio.includes('Barcelona') ? 41.387 : 
                       municipio.includes('Valencia') ? 39.5 : 42.88;
     const num = parseFloat(val);
+    // Ajuste para formatos antiguos
     return num > 1000 ? num / 1000000 : num;
 }
 
@@ -214,170 +219,119 @@ document.getElementById('loadForm').addEventListener('submit', async e => {
     }
 });
 
-// SWAGGER
+// SWAGGER ACTUALIZADO
 function initSwagger() {
     SwaggerUIBundle({
         spec: {
             openapi: "3.0.0",
             info: { 
-                title: "ITV API", 
-                version: "1.0", 
-                description: "5 APIs REST independientes para gestión de estaciones ITV"
+                title: "ITV API (Microservicios)", 
+                version: "2.0", 
+                description: "Arquitectura distribuida: 3 Servicios Regionales + 1 Orquestador + 1 Carga"
             },
             servers: [
-                {url: "http://localhost:5001", description: "API Wrapper CAT"},
-                {url: "http://localhost:5002", description: "API Wrapper GAL"},
-                {url: "http://localhost:5003", description: "API Wrapper CV"},
-                {url: "http://localhost:5004", description: "API Búsqueda"},
+                {url: "http://localhost:5020", description: "Microservicio CAT"},
+                {url: "http://localhost:5030", description: "Microservicio GAL"},
+                {url: "http://localhost:5010", description: "Microservicio CV"},
+                {url: "http://localhost:5004", description: "Orquestador Búsqueda"},
                 {url: "http://localhost:5005", description: "API Carga"}
             ],
             paths: {
-                "/api/wrapper-cat": {
+                // Endpoints de Datos Raw (Extractores)
+                "/cat/records": {
                     get: {
-                        summary: "Wrapper CAT (extractor_cat.py)",
-                        description: "Ejecuta extractor de Catalunya (XML) y devuelve datos normalizados",
-                        tags: ["Wrappers"],
-                        responses: {
-                            "200": {
-                                description: "Datos Catalunya",
-                                content: {
-                                    "application/json": {
-                                        schema: {
-                                            type: "object",
-                                            properties: {
-                                                status: {type: "string"},
-                                                region: {type: "string"},
-                                                total_records: {type: "integer"},
-                                                data: {type: "array"}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        summary: "CAT: Datos Raw (XML)",
+                        description: "Devuelve datos crudos del XML. Selecciona servidor CAT (5020).",
+                        tags: ["Datos Raw"],
+                        responses: { "200": { description: "Lista de registros XML" } }
                     }
                 },
-                "/api/wrapper-gal": {
+                "/gal/records": {
                     get: {
-                        summary: "Wrapper GAL (extractor_gal.py)",
-                        description: "Ejecuta extractor de Galicia (CSV) y devuelve datos normalizados",
-                        tags: ["Wrappers"],
-                        responses: {
-                            "200": {description: "Datos Galicia"}
-                        }
+                        summary: "GAL: Datos Raw (CSV)",
+                        description: "Devuelve datos crudos del CSV. Selecciona servidor GAL (5030).",
+                        tags: ["Datos Raw"],
+                        responses: { "200": { description: "Lista de registros CSV" } }
                     }
                 },
-                "/api/wrapper-cv": {
+                "/cv/records": {
                     get: {
-                        summary: "Wrapper CV (extractor_cv.py)",
-                        description: "Ejecuta extractor de Comunidad Valenciana (JSON) y devuelve datos normalizados",
-                        tags: ["Wrappers"],
-                        responses: {
-                            "200": {description: "Datos Comunidad Valenciana"}
-                        }
+                        summary: "CV: Datos Raw (JSON)",
+                        description: "Devuelve datos crudos del JSON. Selecciona servidor CV (5010).",
+                        tags: ["Datos Raw"],
+                        responses: { "200": { description: "Lista de registros JSON" } }
                     }
                 },
+                // Endpoints de Búsqueda Regionales (NUEVOS)
+                "/api/search/cat": {
+                    get: {
+                        summary: "CAT: Búsqueda Local",
+                        description: "Busca solo en Cataluña. Selecciona servidor CAT (5020).",
+                        tags: ["Búsqueda Regional"],
+                        parameters: [
+                            { name: "localidad", in: "query", schema: {type: "string"} },
+                            { name: "tipo", in: "query", schema: {type: "string"} }
+                        ],
+                        responses: { "200": { description: "Resultados normalizados JSON" } }
+                    }
+                },
+                "/api/search/gal": {
+                    get: {
+                        summary: "GAL: Búsqueda Local",
+                        description: "Busca solo en Galicia. Selecciona servidor GAL (5030).",
+                        tags: ["Búsqueda Regional"],
+                        parameters: [
+                            { name: "localidad", in: "query", schema: {type: "string"} },
+                            { name: "tipo", in: "query", schema: {type: "string"} }
+                        ],
+                        responses: { "200": { description: "Resultados normalizados JSON" } }
+                    }
+                },
+                "/api/search/cv": {
+                    get: {
+                        summary: "CV: Búsqueda Local",
+                        description: "Busca solo en Valencia. Selecciona servidor CV (5010).",
+                        tags: ["Búsqueda Regional"],
+                        parameters: [
+                            { name: "localidad", in: "query", schema: {type: "string"} },
+                            { name: "tipo", in: "query", schema: {type: "string"} }
+                        ],
+                        responses: { "200": { description: "Resultados normalizados JSON" } }
+                    }
+                },
+                // Orquestador Global
                 "/api/search": {
                     get: {
-                        summary: "API Búsqueda (consume 3 wrappers)",
-                        description: "Busca estaciones ITV en las 3 regiones mediante consultas a los wrappers",
-                        tags: ["Búsqueda"],
+                        summary: "Orquestador: Búsqueda Global",
+                        description: "Consulta a las 3 APIs regionales. Selecciona servidor Orquestador (5004).",
+                        tags: ["Orquestador"],
                         parameters: [
-                            {
-                                name: "localidad",
-                                in: "query",
-                                description: "Nombre de la localidad",
-                                schema: {type: "string"}
-                            },
-                            {
-                                name: "tipo",
-                                in: "query",
-                                description: "Tipo de estación",
-                                schema: {
-                                    type: "string",
-                                    enum: ["fija", "movil", "otros"]
-                                }
-                            },
-                            {
-                                name: "cp",
-                                in: "query",
-                                description: "Código postal",
-                                schema: {type: "string"}
-                            },
-                            {
-                                name: "provincia",
-                                in: "query",
-                                description: "Nombre de la provincia",
-                                schema: {type: "string"}
-                            }
+                            { name: "localidad", in: "query", schema: {type: "string"} },
+                            { name: "tipo", in: "query", schema: {type: "string"} }
                         ],
-                        responses: {
-                            "200": {
-                                description: "Resultados búsqueda",
-                                content: {
-                                    "application/json": {
-                                        schema: {
-                                            type: "object",
-                                            properties: {
-                                                status: {type: "string"},
-                                                total_results: {type: "integer"},
-                                                results: {type: "array"}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        responses: { "200": { description: "Resultados combinados" } }
                     }
                 },
+                // API Carga
                 "/api/load": {
                     post: {
-                        summary: "API Carga (ejecuta extractores)",
-                        description: "Recibe archivo (XML/CSV/JSON) y ejecuta el extractor correspondiente según la fuente",
+                        summary: "API Carga",
+                        description: "Sube archivos. Selecciona servidor Carga (5005).",
                         tags: ["Carga"],
                         requestBody: {
-                            required: true,
                             content: {
                                 "multipart/form-data": {
                                     schema: {
                                         type: "object",
                                         properties: {
-                                            archivo: {
-                                                type: "string",
-                                                format: "binary",
-                                                description: "Archivo fuente (ITV-CAT.xml, Estacions_ITV.csv, estaciones.json)"
-                                            },
-                                            fuente: {
-                                                type: "string",
-                                                enum: ["CAT XML", "GAL CSV", "CV JSON"],
-                                                description: "Tipo de fuente de datos"
-                                            }
-                                        },
-                                        required: ["archivo", "fuente"]
-                                    }
-                                }
-                            }
-                        },
-                        responses: {
-                            "200": {
-                                description: "Resultado carga",
-                                content: {
-                                    "application/json": {
-                                        schema: {
-                                            type: "object",
-                                            properties: {
-                                                status: {type: "string"},
-                                                registros_ok: {type: "integer"},
-                                                registros_reparados: {type: "integer"},
-                                                registros_rechazados: {type: "integer"},
-                                                detalles_reparados: {type: "array"},
-                                                detalles_rechazados: {type: "array"}
-                                            }
+                                            archivo: { type: "string", format: "binary" },
+                                            fuente: { type: "string", enum: ["CAT XML", "GAL CSV", "CV JSON"] }
                                         }
                                     }
                                 }
                             }
-                        }
+                        },
+                        responses: { "200": { description: "Resultado carga" } }
                     }
                 }
             }

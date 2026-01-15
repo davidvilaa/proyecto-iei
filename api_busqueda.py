@@ -16,7 +16,7 @@ REGIONAL_APIS = [
 def query_service(url, params):
     """Función auxiliar para llamar a una API regional"""
     try:
-        response = requests.get(url, params=params, timeout=2)
+        response = requests.get(url, params=params, timeout=5)
         if response.status_code == 200:
             return response.json().get('results', [])
     except Exception as e:
