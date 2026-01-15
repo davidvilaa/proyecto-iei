@@ -12,7 +12,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 # Configuración
 # -------------------------
 # Asegúrate de que este puerto coincida con tu wrapper (5020 o 5001 según tu launcher)
-CAT_API_BASE = "http://127.0.0.1:8002" 
+CAT_API_BASE = "http://127.0.0.1:8040" 
 CAT_RECORDS_URL = f"{CAT_API_BASE}/cat/records"
 
 CREDENTIALS_FILE = "iei-proyecto-firebase-adminsdk-fbsvc-04d774ba06.json"
