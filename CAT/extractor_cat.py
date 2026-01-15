@@ -3,6 +3,7 @@
 import re
 import unicodedata
 import requests
+import os
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -11,99 +12,82 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 # -------------------------
 # Configuración
 # -------------------------
-# Asegúrate de que este puerto coincida con tu wrapper (5020 o 5001 según tu launcher)
 CAT_API_BASE = "http://127.0.0.1:8040" 
 CAT_RECORDS_URL = f"{CAT_API_BASE}/cat/records"
 
-CREDENTIALS_FILE = "iei-proyecto-firebase-adminsdk-fbsvc-04d774ba06.json"
-
-CP_PREFIJOS_CAT = {
-    "Barcelona": {"08"},
-    "Girona": {"17"},
-    "Lleida": {"25"},
-    "Tarragona": {"43"},
-}
+# Ruta de credenciales
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) 
+PROJECT_ROOT = os.path.dirname(BASE_DIR)              
+CREDENTIALS_FILE = os.path.join(PROJECT_ROOT, "iei-proyecto-firebase-adminsdk-fbsvc-04d774ba06.json")
 
 # -------------------------
 # Utilidades
 # -------------------------
-def warn_if_empty(nombre_campo: str, valor, idx: int) -> None:
-    if valor is None or str(valor).strip() == "":
-        print(f"[WARN] Registro {idx}: campo '{nombre_campo}' vacío o ausente.")
-
-def normalizar_provincia_cat(nombre_raw: str, idx: int) -> str | None:
-    """
-    Normaliza provincia a Barcelona / Girona / Lleida / Tarragona.
-    """
+def normalizar_provincia_cat(nombre_raw: str) -> str | None:
     if not nombre_raw or not nombre_raw.strip():
-        print(f"[ERROR] Registro {idx}: provincia vacía.")
         return None
 
     s = nombre_raw.strip()
-    # Eliminar tildes para comparar
     s_norm = "".join(
         c for c in unicodedata.normalize("NFD", s)
         if unicodedata.category(c) != "Mn"
     ).lower()
 
-    if s_norm == "barcelona":
-        return "Barcelona"
-    if s_norm == "girona":
-        return "Girona"
-    if s_norm in ("lleida", "lerida"):
-        return "Lleida"
-    if s_norm == "tarragona":
-        return "Tarragona"
-
-    print(f"[ERROR] Registro {idx}: provincia '{nombre_raw}' no reconocida como catalana.")
+    if s_norm == "barcelona": return "Barcelona"
+    if s_norm == "girona": return "Girona"
+    if s_norm in ("lleida", "lerida"): return "Lleida"
+    if s_norm == "tarragona": return "Tarragona"
     return None
 
-def cp_coincide_con_provincia(cp: str, provincia_nombre: str, idx: int) -> None:
-    """
-    Verifica si el CP coincide con la provincia, solo para logging.
-    """
-    if not cp or len(cp) < 2 or not provincia_nombre:
-        return
-    prefijo = cp[:2]
-    permitidos = CP_PREFIJOS_CAT.get(provincia_nombre, set())
-    if permitidos and prefijo not in permitidos:
-        print(
-            f"[WARN] Registro {idx}: CP '{cp}' no coincide con provincia '{provincia_nombre}' "
-            f"(prefijos esperados: {', '.join(sorted(permitidos))})."
-        )
-
 def traducir_horario(horario_texto: str) -> str:
-    if not horario_texto:
-        return "Horario no especificado"
-    # Se pueden añadir más traducciones aquí si es necesario
+    if not horario_texto: return "Horario no especificado"
     return horario_texto.replace("dilluns", "Lunes").replace("divendres", "Viernes")
 
 def ajustar_contacto(correo_origen: str) -> str:
-    if not correo_origen:
-        return "contacto@default.com"
-
-    # Regex simple para validar email
+    if not correo_origen: return "contacto@default.com"
     email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     if re.fullmatch(email_regex, correo_origen.strip()):
         return correo_origen.strip()
-
-    print(f"[WARN] El contacto '{correo_origen}' no es un email válido. Usando placeholder.")
     return f"INVALID_CONTACT_{correo_origen}"
 
 def get_starting_counter(db, collection_name: str) -> int:
-    """Calcula el siguiente ID basado en los documentos existentes."""
     docs = db.collection(collection_name).stream()
     max_id = 0
     for doc in docs:
         try:
             num = int(doc.id)
             max_id = max(max_id, num)
-        except ValueError:
-            pass
+        except ValueError: pass
     return max_id + 1
 
+# --- FUNCIÓ CLAU PER ARREGLAR VILADECANS ---
+def ajustar_coordenada(valor_float: float, es_latitud: bool) -> float:
+    """
+    Ajusta la magnitud del número (dividiendo o multiplicando por 10)
+    hasta que encaje en las coordenadas lógicas de Catalunya.
+    Esto arregla la mezcla de formatos de 6 y 8 cifras del XML.
+    """
+    if valor_float == 0: return 0.0
+    
+    # Rangos aproximados (seguridad) para Catalunya
+    min_val = 39.0 if es_latitud else 0.0
+    max_val = 44.0 if es_latitud else 4.0
+    
+    val = valor_float
+    
+    # 1. Si es demasiado grande (ej: 413028 -> 41.3)
+    while abs(val) > max_val:
+        val /= 10.0
+        
+    # 2. Si es demasiado pequeño por haber dividido demasiado antes (ej: 0.41 -> 41.0)
+    # (Aunque con la lógica actual esto pasa menos, es por seguridad)
+    while abs(val) < min_val and val != 0:
+        val *= 10.0
+        
+    return val
+
 # -------------------------
-# Lógica Principal
+# Main
 # -------------------------
 def obtener_registros_raw() -> list[dict]:
     try:
@@ -126,7 +110,7 @@ def main():
     data_cat = obtener_registros_raw()
     
     if not data_cat:
-        print("[ERROR] No se obtuvieron datos. Revisa que el Wrapper CAT esté corriendo (puerto 5020).")
+        print(f"[ERROR] No hay datos. Revisa puerto 8040.")
         return
 
     try:
@@ -137,211 +121,176 @@ def main():
         return
 
     batch = db.batch()
-    registros_procesados = 0
+    registros_insertados = 0
 
-    # Inicializar contadores desde la BD
     provincia_counter = get_starting_counter(db, "provincias")
     localidad_counter = get_starting_counter(db, "localidades")
     estacion_counter = get_starting_counter(db, "estaciones")
 
-    # Cachés para no repetir lecturas/escrituras
-    provincia_ids = {}              # nombre_norm -> codigo
-    localidad_ids = {}              # nombre_localidad -> codigo
-    estaci_vistas = {}              # codigo_estacion_origen -> indice
-    estaciones_por_municipio = {}   # nombre_localidad -> contador
+    provincia_ids = {}
+    localidad_ids = {}
+    estaci_vistas = {}
+    estaciones_por_municipio = {}
 
     print(f"[INFO] Procesando {len(data_cat)} registros...")
 
     for i, registro in enumerate(data_cat, start=1):
         try:
-            # ===== 1. Lectura de campos RAW =====
-            
-            # Provincia
-            raw_provincia = (registro.get("serveis_territorials") or "").strip()
-            warn_if_empty("serveis_territorials", raw_provincia, i)
-
-            # Municipio
-            municipio_raw = (registro.get("municipi") or "").strip()
-            warn_if_empty("municipi", municipio_raw, i)
-            municipio_norm = municipio_raw.title()
-
-            # Dirección
-            raw_direccion = registro.get("adre_a", "")
-            warn_if_empty("adre_a", raw_direccion, i)
-
-            # Código Postal
-            raw_cp = (registro.get("cp") or "").strip()
-            # Relleno de ceros si es numérico (ej: "8001" -> "08001")
-            if raw_cp and raw_cp.isdigit() and len(raw_cp) < 5:
-                raw_cp = raw_cp.zfill(5)
-            warn_if_empty("cp", raw_cp, i)
-
-            # Validación básica CP (5 dígitos)
-            cp_valido = True
-            if raw_cp and not re.fullmatch(r"\d{5}", raw_cp):
-                print(f"[WARN] Registro {i}: CP '{raw_cp}' formato inválido.")
-                cp_valido = False
-
-            # Otros campos
-            raw_horario = registro.get("horari_de_servei", "")
-            raw_correo = registro.get("correu_electr_nic", "")
-            raw_tel = (registro.get("tel_atenc_public") or "").strip()
+            # 1. Identificador básico
             raw_estaci = (registro.get("estaci") or "").strip()
-            warn_if_empty("estaci", raw_estaci, i)
-
-            # ===== 2. Control de Duplicados =====
+            
+            # --- CONTROL DUPLICADOS ---
             if raw_estaci:
                 if raw_estaci in estaci_vistas:
-                    prev_idx = estaci_vistas[raw_estaci]
-                    print(f"[WARN] Registro {i}: Estación '{raw_estaci}' duplicada (vista en {prev_idx}). Se omite.")
                     continue
                 estaci_vistas[raw_estaci] = i
 
-            # ===== 3. Procesamiento Provincia =====
-            provincia_nombre = normalizar_provincia_cat(raw_provincia, i)
-            p_codigo = ""
+            # --- PROVINCIA ---
+            raw_provincia = (registro.get("serveis_territorials") or "").strip()
+            provincia_nombre = normalizar_provincia_cat(raw_provincia)
+            if not provincia_nombre:
+                print(f"[WARN] Registro {i}: Provincia inexistente. NO SE GUARDA EN BD")
+                continue
+
+            # --- MUNICIPIO ---
+            municipio_raw = (registro.get("municipi") or "").strip()
+            if not municipio_raw:
+                print(f"[WARN] Registro {i}: Municipio inexistente. NO SE GUARDA EN BD")
+                continue
+            municipio_norm = municipio_raw.title()
+
+            # Nombre estación
+            count_prev = estaciones_por_municipio.get(municipio_norm, 0)
+            nuevo_indice = count_prev + 1
+            sufijo = f" {nuevo_indice}" if nuevo_indice > 1 else ""
+            nombre_estacion = f"Estación de {municipio_norm}{sufijo}"
+
+            # --- CÓDIGO POSTAL ---
+            raw_cp = (registro.get("cp") or "").strip()
+            if raw_cp and raw_cp.isdigit() and len(raw_cp) < 5:
+                raw_cp = raw_cp.zfill(5)
             
-            if provincia_nombre:
-                if provincia_nombre in provincia_ids:
-                    p_codigo = provincia_ids[provincia_nombre]
-                else:
-                    # Buscar si existe en BD
-                    docs_prov = list(db.collection("provincias")
-                                   .where(filter=FieldFilter("nombre", "==", provincia_nombre))
-                                   .limit(1).stream())
-                    if docs_prov:
-                        p_codigo = docs_prov[0].id
-                    else:
-                        p_codigo = f"{provincia_counter:04d}"
-                        provincia_counter += 1
-                        batch.set(
-                            db.collection("provincias").document(p_codigo),
-                            {"codigo": p_codigo, "nombre": provincia_nombre},
-                            merge=True
-                        )
-                    provincia_ids[provincia_nombre] = p_codigo
+            cp_valido = bool(raw_cp and re.fullmatch(r"\d{5}", raw_cp))
+            if not cp_valido:
+                print(f"[WARN] Registro {i} ({nombre_estacion}): Codigo postal inexistente. NO SE GUARDA EN BD")
+                continue
 
-            # ===== 4. Validación Coherencia CP (CORREGIDO) =====
-            # Aquí estaba el problema. Ahora solo avisamos, NO invalidamos.
-            if provincia_nombre and cp_valido and re.fullmatch(r"\d{5}", raw_cp or ""):
-                prefijo = raw_cp[:2]
-                permitidos = CP_PREFIJOS_CAT.get(provincia_nombre, set())
-                
-                if permitidos and prefijo not in permitidos:
-                    print(
-                        f"[WARN] Registro {i}: CP '{raw_cp}' no coincide con '{provincia_nombre}' "
-                        f"(esperado: {permitidos}). SE GUARDARÁ IGUALMENTE."
-                    )
-                    # cp_valido = False  <-- ¡ESTA LÍNEA ESTÁ COMENTADA PARA ARREGLARLO!
+            # --- GEOLOCALIZACIÓN INTELIGENTE ---
+            # Detección de móvil
+            denominacion = (registro.get("denominaci", "") or "").lower()
+            es_movil = "mòbil" in denominacion or "móvil" in denominacion or "mòbil" in nombre_estacion.lower()
+            tipo_estacion = "Estación_movil" if es_movil else "Estación_fija"
 
-            # ===== 5. Procesamiento Localidad =====
-            l_codigo = ""
-            tiene_municipio = False
+            # Extracción desde geocoded_column POINT(LON LAT)
+            geocoded = registro.get("geocoded_column", "")
+            match_geo = re.search(r"POINT\s*\(\s*([-\d]+)\s+([-\d]+)\s*\)", geocoded)
             
-            if municipio_raw:
-                if municipio_norm in localidad_ids:
-                    l_codigo = localidad_ids[municipio_norm]
-                else:
-                    docs_loc = list(db.collection("localidades")
-                                  .where(filter=FieldFilter("nombre", "==", municipio_norm))
-                                  .limit(1).stream())
-                    if docs_loc:
-                        l_codigo = docs_loc[0].id
-                    else:
-                        l_codigo = f"{localidad_counter:04d}"
-                        localidad_counter += 1
-                        batch.set(
-                            db.collection("localidades").document(l_codigo),
-                            {"codigo": l_codigo, "nombre": municipio_norm, "provincia_codigo": p_codigo},
-                            merge=True
-                        )
-                    localidad_ids[municipio_norm] = l_codigo
-                tiene_municipio = True
-            else:
-                print(f"[ERROR] Registro {i}: Sin municipio.")
+            lat_val = 0.0
+            lon_val = 0.0
 
-            # ===== 6. Procesamiento Estación =====
-            # Coordenadas (dividir por 1M según tu formato original)
-            try:
-                long_raw = float(registro.get("long", 0) or 0)
-                lat_raw = float(registro.get("lat", 0) or 0)
-                longitud = str(long_raw / 1_000_000.0)
-                latitud = str(lat_raw / 1_000_000.0)
-            except ValueError:
-                longitud = "0.0"
-                latitud = "0.0"
-
-            # Nombre y descripción
-            if tiene_municipio:
-                count_prev = estaciones_por_municipio.get(municipio_norm, 0)
-                nuevo_indice = count_prev + 1
-                estaciones_por_municipio[municipio_norm] = nuevo_indice
+            if match_geo:
+                # Obtenemos los enteros crudos (ej: 413028 o 41357138)
+                raw_lon = float(match_geo.group(1))
+                raw_lat = float(match_geo.group(2))
                 
-                sufijo = f" {nuevo_indice}" if nuevo_indice > 1 else ""
-                nombre_estacion = f"Estación de {municipio_norm}{sufijo}"
-                descripcion = f"ITV en {municipio_norm}. Revisión anual."
+                # Ajustamos magnitud automáticamente para que sean coordenadas GPS válidas
+                lon_val = ajustar_coordenada(raw_lon, es_latitud=False)
+                lat_val = ajustar_coordenada(raw_lat, es_latitud=True)
             else:
-                nombre_estacion = f"Estación ITV {raw_estaci}"
-                descripcion = "ITV General"
+                # Intentamos fallback a campos lat/long individuales
+                try:
+                    raw_lon = float(registro.get("long", 0) or 0)
+                    raw_lat = float(registro.get("lat", 0) or 0)
+                    lon_val = ajustar_coordenada(raw_lon, es_latitud=False)
+                    lat_val = ajustar_coordenada(raw_lat, es_latitud=True)
+                except:
+                    pass
 
+            # FILTRO GEOGRÁFICO
+            dentro_cat = (40.0 <= lat_val <= 44.0) and (0.0 <= lon_val <= 4.0)
+
+            if not es_movil and not dentro_cat:
+                if lat_val != 0 or lon_val != 0:
+                    print(f"[WARN] Registro {i} ({nombre_estacion}): Coordenadas fuera de Cataluña ({lat_val}, {lon_val}). NO SE GUARDA EN BD")
+                else:
+                    print(f"[WARN] Registro {i} ({nombre_estacion}): Coordenadas vacías (0,0). NO SE GUARDA EN BD")
+                continue
+
+            longitud = str(lon_val)
+            latitud = str(lat_val)
+
+            # -------------------------------------------------------------------
+            # GUARDADO
+            # -------------------------------------------------------------------
+            
+            # Actualizar contadores
+            estaciones_por_municipio[municipio_norm] = nuevo_indice
+
+            # Provincia
+            if provincia_nombre in provincia_ids:
+                p_codigo = provincia_ids[provincia_nombre]
+            else:
+                docs_prov = list(db.collection("provincias").where(filter=FieldFilter("nombre", "==", provincia_nombre)).limit(1).stream())
+                if docs_prov:
+                    p_codigo = docs_prov[0].id
+                else:
+                    p_codigo = f"{provincia_counter:04d}"
+                    provincia_counter += 1
+                    batch.set(db.collection("provincias").document(p_codigo), {"codigo": p_codigo, "nombre": provincia_nombre}, merge=True)
+                provincia_ids[provincia_nombre] = p_codigo
+
+            # Localidad
+            if municipio_norm in localidad_ids:
+                l_codigo = localidad_ids[municipio_norm]
+            else:
+                docs_loc = list(db.collection("localidades").where(filter=FieldFilter("nombre", "==", municipio_norm)).limit(1).stream())
+                if docs_loc:
+                    l_codigo = docs_loc[0].id
+                else:
+                    l_codigo = f"{localidad_counter:04d}"
+                    localidad_counter += 1
+                    batch.set(db.collection("localidades").document(l_codigo), {"codigo": l_codigo, "nombre": municipio_norm, "provincia_codigo": p_codigo}, merge=True)
+                localidad_ids[municipio_norm] = l_codigo
+
+            # Estación
+            raw_direccion = registro.get("adre_a", "")
+            raw_horario = registro.get("horari_de_servei", "")
+            raw_correo = registro.get("correu_electr_nic", "")
+            raw_tel = (registro.get("tel_atenc_public") or "").strip()
             contacto_final = raw_tel if raw_tel else ajustar_contacto(raw_correo)
 
-            if not provincia_nombre:
-                print(f"[WARN] Registro {i}: Se omite por falta de PROVINCIA.")
-                continue
-
-            if not tiene_municipio:
-                print(f"[WARN] Registro {i}: Se omite por falta de MUNICIPIO.")
-                continue
-
-            # Nota: en tu código original, si cp_valido es False, no guardabas el CP.
-            # Ahora, si no es válido o está vacío, descartamos toda la estación.
-            if not cp_valido or not raw_cp:
-                print(f"[WARN] Registro {i}: Se omite por falta de CÓDIGO POSTAL válido.")
-                continue
-
-            tipo_asignado = "Estación_fija"
-
-            tiene_coords = (latitud != "0.0" and longitud != "0.0")
-
-            if tipo_asignado != "Estación_movil" and not tiene_coords:
-                print(f"[WARN] Registro {i}: Se omite estación FIJA sin coordenadas válidas.")
-                continue
-            
             cod_estacion = f"{estacion_counter:05d}"
             estacion_counter += 1
 
-            # Guardar en Batch
             batch.set(
                 db.collection("estaciones").document(cod_estacion),
                 {
                     "nombre": nombre_estacion,
                     "cod_estacion": cod_estacion,
                     "direccion": raw_direccion,
-                    "codigo_postal": raw_cp if cp_valido else "", # Ahora sí se guarda si cp_valido=True
+                    "codigo_postal": raw_cp, 
                     "longitud": longitud,
                     "latitud": latitud,
-                    "tipo": tipo_asignado,
-                    "descripcion": descripcion,
+                    "tipo": tipo_estacion,
+                    "descripcion": f"ITV en {municipio_norm}. Revisión anual.",
                     "horario": traducir_horario(raw_horario),
                     "contacto": contacto_final,
-                    "URL": registro.get("web", {}).get("url", "") if isinstance(registro.get("web"), dict) else str(registro.get("web", "")),
+                    "URL": str(registro.get("web", "")),
                     "localidad_codigo": l_codigo,
                 },
             )
 
-            registros_procesados += 1
-            if registros_procesados % 500 == 0:
-                print(f"[INFO] Commit parcial... ({registros_procesados} registros)")
+            registros_insertados += 1
+            if registros_insertados % 500 == 0:
+                print(f"[INFO] Insertados {registros_insertados}...")
                 batch.commit()
                 batch = db.batch()
 
         except Exception as e:
-            print(f"[ERROR] Excepción en registro {i}: {e}")
+            print(f"[ERROR] Excepción registro {i}: {e}")
 
-    # Commit final
     batch.commit()
-    print(f"[INFO] Carga finalizada. {registros_procesados} estaciones procesadas.")
+    print(f"[INFO] Carga finalizada. {registros_insertados} estaciones insertadas.")
 
 if __name__ == "__main__":
     main()
