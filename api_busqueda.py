@@ -6,16 +6,17 @@ import concurrent.futures
 app = Flask(__name__)
 CORS(app)
 
-# Registro de los microservicios regionales
+# URLs de los microservicios regionales (coinciden con tu launcher.py)
 REGIONAL_APIS = [
-    'http://localhost:5010/api/search/cv',   # API CV
-    'http://localhost:5020/api/search/cat',  # API CAT (Debes crearla)
-    'http://localhost:5030/api/search/gal'   # API GAL (Debes crearla)
+    'http://localhost:5010/api/search/cv',   # Microservicio CV
+    'http://localhost:5020/api/search/cat',  # Microservicio CAT
+    'http://localhost:5030/api/search/gal'   # Microservicio GAL
 ]
 
 def query_service(url, params):
-    """Función auxiliar para llamar a una API regional"""
+    """Llama a un microservicio regional con timeout"""
     try:
+        # Timeout de 5s para dar tiempo a leer archivos grandes
         response = requests.get(url, params=params, timeout=5)
         if response.status_code == 200:
             return response.json().get('results', [])
@@ -25,10 +26,12 @@ def query_service(url, params):
 
 @app.route('/api/search', methods=['GET'])
 def search_global():
-    params = request.args.to_dict() # Pasa los mismos filtros (localidad, tipo, etc)
+    params = request.args.to_dict()
     all_results = []
 
-    # Llamada paralela a las 3 APIs para que sea rápido
+    print(f"🌍 Iniciando búsqueda global: {params}")
+
+    # Peticiones en paralelo a los 3 microservicios
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(query_service, url, params) for url in REGIONAL_APIS]
         for future in concurrent.futures.as_completed(futures):
@@ -41,5 +44,5 @@ def search_global():
     })
 
 if __name__ == '__main__':
-    print("🌍 API Busqueda GLOBAL (Orquestador) corriendo en puerto 5004")
+    print("🌍 API Orquestador corriendo en puerto 5004")
     app.run(host='127.0.0.1', port=5004)

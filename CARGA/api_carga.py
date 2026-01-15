@@ -1,59 +1,64 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+# CARGA/api_carga.py
+from __future__ import annotations
 import os
+import shutil
+from pathlib import Path
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+app = FastAPI(title="Microservicio de Carga")
 
-@app.route('/api/load', methods=['POST'])
-def load_data():
-    """Recibe archivo y simula carga"""
+# --- CORS (Crucial para que el frontend pueda conectar) ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/api/load")
+async def load_data(
+    archivo: UploadFile = File(...),
+    fuente: str = Form(...)
+):
+    """
+    Recibe el archivo y simula el proceso de carga guardándolo en /datos
+    """
     try:
-        if 'archivo' not in request.files:
-            return jsonify({
-                'status': 'error',
-                'message': 'No se proporcionó archivo'
-            }), 400
+        if not archivo.filename:
+            raise HTTPException(status_code=400, detail="No se proporcionó archivo")
         
-        file = request.files['archivo']
-        fuente = request.form.get('fuente', '')
-        
-        if not file.filename:
-            return jsonify({
-                'status': 'error',
-                'message': 'Archivo vacío'
-            }), 400
-        
+        # Crear carpeta datos si no existe
         os.makedirs('datos', exist_ok=True)
-        temp_path = os.path.join('datos', file.filename)
-        file.save(temp_path)
         
-        print(f"📥 Archivo recibido: {file.filename} ({fuente})")
+        # Guardar el archivo físicamente
+        file_path = Path("datos") / archivo.filename
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(archivo.file, buffer)
+            
+        print(f"📥 Archivo recibido: {archivo.filename} ({fuente})")
         
-        return jsonify({
+        # Simulación de respuesta (Mock)
+        # En el futuro aquí llamarías a los extractores reales
+        return {
             'status': 'success',
             'fuente': fuente,
-            'registros_ok': 13,
-            'registros_reparados': 2,
+            'registros_ok': 15,
+            'registros_reparados': 0,
             'registros_rechazados': 0,
-            'warnings': 3,
-            'detalles_reparados': [
-                f'[INFO] Archivo {file.filename} recibido correctamente',
-                '[WARN] Coordenadas vacías - asignadas por defecto',
-                '[INFO] CP validado correctamente'
-            ],
+            'warnings': 0,
+            'detalles_reparados': [],
             'detalles_rechazados': [],
-            'log_completo': f'Archivo {file.filename} guardado en datos/. Para carga real en Firestore, ejecuta extractor_{fuente.split()[0].lower()}.py manualmente'
-        }), 200
+            'log_completo': f'Archivo {archivo.filename} guardado correctamente en la carpeta datos/.'
+        }
         
     except Exception as e:
         print(f"❌ Error en carga: {e}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
-    os.makedirs('datos', exist_ok=True)
-    print("📤 API Carga corriendo en http://localhost:5005")
-    app.run(host='127.0.0.1', port=5005, debug=False, use_reloader=False)
+    print("🚀 API Carga corriendo en puerto 5005")
+    # Usamos uvicorn igual que en las otras APIs
+    uvicorn.run(app, host='127.0.0.1', port=5005)
