@@ -13,7 +13,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 # -------------------------
 # Config
 # -------------------------
-CV_API_BASE = "http://127.0.0.1:5010"
+CV_API_BASE = "http://127.0.0.1:8003"
 CV_RECORDS_URL = f"{CV_API_BASE}/cv/records?limit=50"
 
 CREDENTIALS_FILE = "iei-proyecto-firebase-adminsdk-fbsvc-04d774ba06.json"

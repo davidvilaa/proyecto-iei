@@ -11,7 +11,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 # =========================
 # Config del extractor
 # =========================
-GAL_API_BASE = "http://127.0.0.1:5030"  # donde levantes api_busqueda_gal.py
+GAL_API_BASE = "http://127.0.0.1:8001"  # donde levantes api_busqueda_gal.py
 GAL_RECORDS_URL = f"{GAL_API_BASE}/gal/records"
 
 CREDENTIALS_FILE = "iei-proyecto-firebase-adminsdk-fbsvc-04d774ba06.json"

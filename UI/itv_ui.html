@@ -1,0 +1,355 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Buscador de Estaciones ITV</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    :root{
+      --bg: #f3f3f3;
+      --border: #cfcfcf;
+      --text: #222;
+    }
+    body{
+      margin:0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Times New Roman", Georgia, serif;
+    }
+    .wrap{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 26px 18px 30px;
+    }
+    h1{
+      font-size: 48px;
+      font-weight: 400;
+      margin: 10px 0 24px;
+    }
+
+    .top{
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 36px;
+      align-items: start;
+    }
+
+    .formbox{ padding-top: 10px; }
+    .row{
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    .row label{ text-align: right; }
+    input, select{
+      height: 26px;
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 0 8px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      width: 220px;
+    }
+    select{ width: 230px; }
+
+    .btnrow{
+      display: grid;
+      grid-template-columns: 140px 140px;
+      gap: 18px;
+      margin-top: 18px;
+      margin-left: 130px;
+    }
+    button{
+      height: 34px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+    }
+    #btnCancelar{
+      background: #fff;
+      color: #3a4abf;
+      border: 1px solid #aeb6ff;
+    }
+    #btnBuscar{
+      background: #6c6c6c;
+      color: #fff;
+      border: 1px solid #5f5f5f;
+    }
+
+    .mapbox{
+      display: flex;
+      justify-content: center;
+      padding-top: 30px;
+    }
+    #map{
+      width: 420px;
+      height: 240px;
+      border: 1px solid var(--border);
+      background: #eaeaea;
+    }
+
+    .resultsTitle{
+      margin-top: 26px;
+      font-size: 16px;
+    }
+    .resultsMeta{
+      margin-top: 8px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .tableBox{
+      margin-top: 10px;
+      border: 1px solid #000;
+      height: 200px;
+      background: #fff;
+      overflow: auto;
+    }
+    table{
+      border-collapse: collapse;
+      min-width: 900px;
+      width: 100%;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+    th, td{
+      border: 1px solid #000;
+      padding: 6px 8px;
+      vertical-align: top;
+      background: #fff;
+    }
+    thead th{
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f1f1f1;
+    }
+    tbody tr:hover{
+      background: #f7f7f7;
+      cursor: pointer;
+    }
+
+    @media (max-width: 900px){
+      .top{ grid-template-columns: 1fr; }
+      .mapbox{ padding-top: 10px; }
+      #map{ width: 100%; }
+      .btnrow{ margin-left: 0; }
+      input, select{ width: 100%; }
+      .row{ grid-template-columns: 120px 1fr; }
+      .tableBox{ height: 260px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Buscador de Estaciones ITV</h1>
+
+    <div class="top">
+      <div class="formbox">
+        <div class="row">
+          <label for="localidad">Localidad:</label>
+          <input id="localidad" />
+        </div>
+
+        <div class="row">
+          <label for="cp">Cód. Postal:</label>
+          <input id="cp" />
+        </div>
+
+        <div class="row">
+          <label for="provincia">Provincia:</label>
+          <input id="provincia" />
+        </div>
+
+        <div class="row">
+          <label for="tipo">Tipo:</label>
+          <select id="tipo">
+            <option value="">(Cualquiera)</option>
+            <option value="Estación_fija">Estación Fija</option>
+            <option value="Estación_movil">Estación Móvil</option>
+          </select>
+        </div>
+
+        <div class="btnrow">
+          <button id="btnCancelar" type="button">Cancelar</button>
+          <button id="btnBuscar" type="button">Buscar</button>
+        </div>
+      </div>
+
+      <div class="mapbox">
+        <div id="map"></div>
+      </div>
+    </div>
+
+    <div class="resultsTitle">Resultados de la búsqueda:</div>
+    <div class="resultsMeta" id="resultsMeta">Cargando estaciones...</div>
+
+    <div class="tableBox">
+      <table id="tabla">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Dirección</th>
+            <th>Localidad</th>
+            <th>Cód. postal</th>
+            <th>Provincia</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody id="tablaBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+  const API_BASE = "http://127.0.0.1:8020";
+
+  // -------- Leaflet --------
+  const map = L.map("map").setView([40.4168, -3.7038], 5);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+
+  const markersLayer = L.layerGroup().addTo(map);
+  const markerById = new Map();
+
+  function clearMarkers() {
+    markersLayer.clearLayers();
+    markerById.clear();
+  }
+
+  function esc(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  function buildUrl() {
+    const params = new URLSearchParams();
+    const localidad = document.getElementById("localidad").value.trim();
+    const cp = document.getElementById("cp").value.trim();
+    const provincia = document.getElementById("provincia").value.trim();
+    const tipo = document.getElementById("tipo").value;
+
+    if (localidad) params.set("localidad", localidad);
+    if (cp) params.set("cp", cp);
+    if (provincia) params.set("provincia", provincia);
+    if (tipo) params.set("tipo", tipo);
+
+    const qs = params.toString();
+    return `${API_BASE}/estaciones${qs ? "?" + qs : ""}`;
+  }
+
+  function setMeta(count){
+    document.getElementById("resultsMeta").textContent =
+      `Se han encontrado ${count} estación(es).`;
+  }
+
+  function fillTable(estaciones){
+    const body = document.getElementById("tablaBody");
+    body.innerHTML = "";
+
+    estaciones.forEach(e => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${esc(e.nombre)}</td>
+        <td>${esc(e.tipo)}</td>
+        <td>${esc(e.direccion)}</td>
+        <td>${esc(e.localidad)}</td>
+        <td>${esc(e.codigo_postal)}</td>
+        <td>${esc(e.provincia)}</td>
+        <td>${esc(e.descripcion)}</td>
+      `;
+      tr.addEventListener("click", () => focusMarker(e.id));
+      body.appendChild(tr);
+    });
+  }
+
+  function focusMarker(id){
+    const m = markerById.get(id);
+    if (!m) return;
+    map.setView(m.getLatLng(), Math.max(map.getZoom(), 13));
+    m.openPopup();
+  }
+
+  function fillMap(estaciones){
+    clearMarkers();
+    const bounds = [];
+
+    estaciones.forEach(e => {
+      const lat = Number(e.latitud);
+      const lon = Number(e.longitud);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+      // Popup SIN link
+      const popup = `
+        <div style="min-width:220px">
+          <b>${esc(e.nombre)}</b><br/>
+          ${esc(e.direccion)}<br/>
+          ${esc(e.localidad)}${e.provincia ? " (" + esc(e.provincia) + ")" : ""}<br/>
+          ${e.codigo_postal ? "CP " + esc(e.codigo_postal) + "<br/>" : ""}
+        </div>
+      `;
+
+      const marker = L.marker([lat, lon]).bindPopup(popup);
+      marker.addTo(markersLayer);
+      markerById.set(e.id, marker);
+      bounds.push([lat, lon]);
+    });
+
+    if (bounds.length) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }
+
+  async function buscar(){
+    const url = buildUrl();
+    document.getElementById("resultsMeta").textContent = "Buscando...";
+
+    try{
+      const res = await fetch(url);
+      const data = await res.json();
+      const estaciones = data?.estaciones ?? [];
+      const count = data?.count ?? estaciones.length;
+
+      setMeta(count);
+      fillTable(estaciones);
+      fillMap(estaciones);
+    } catch(e){
+      document.getElementById("resultsMeta").textContent =
+        "Error llamando a la API (¿está levantada en 8020?).";
+      document.getElementById("tablaBody").innerHTML = "";
+      clearMarkers();
+    }
+  }
+
+  function cancelar(){
+    ["localidad","cp","provincia"].forEach(id => document.getElementById(id).value = "");
+    document.getElementById("tipo").value = "";
+    buscar();
+  }
+
+  document.getElementById("btnBuscar").addEventListener("click", buscar);
+  document.getElementById("btnCancelar").addEventListener("click", cancelar);
+
+  // Cargar TODO al iniciar
+  document.addEventListener("DOMContentLoaded", () => buscar());
+</script>
+</body>
+</html>

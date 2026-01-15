@@ -1,0 +1,330 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carga del almacén de datos</title>
+
+  <style>
+    :root{
+      --bg: #f3f3f3;
+      --border: #cfcfcf;
+      --text: #222;
+    }
+    body{
+      margin:0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Times New Roman", Georgia, serif;
+    }
+    .wrap{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 26px 18px 30px;
+    }
+    h1{
+      font-size: 40px;
+      font-weight: 400;
+      margin: 18px 0 30px;
+      text-align: center;
+    }
+
+    .centerBox{
+      display: grid;
+      justify-items: center;
+      gap: 18px;
+    }
+
+    .sources{
+      display: grid;
+      grid-template-columns: 170px 260px;
+      align-items: start;
+      gap: 16px;
+      margin-top: 10px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color: #333;
+    }
+    .sources .label{
+      text-align: right;
+      padding-top: 2px;
+    }
+    .checks{
+      display: grid;
+      gap: 10px;
+    }
+    .checkRow{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btnrow{
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    button{
+      height: 34px;
+      min-width: 120px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      font-family: Arial, sans-serif;
+      cursor: pointer;
+      padding: 0 14px;
+    }
+    #btnCancelar{
+      background: #fff;
+      color: #3a4abf;
+      border: 1px solid #aeb6ff;
+    }
+    #btnCargar{
+      background: #6c6c6c;
+      color: #fff;
+      border: 1px solid #5f5f5f;
+    }
+    #btnBorrar{
+      background: #d0187a;
+      color: #fff;
+      border: 1px solid #b01366;
+    }
+    button:disabled{
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .resultsTitle{
+      margin-top: 26px;
+      font-size: 16px;
+      font-weight: 400;
+    }
+    .resultsBox{
+      margin-top: 10px;
+      border: 1px solid #000;
+      background: #fff;
+      width: 560px;
+      max-width: 100%;
+      min-height: 150px;
+      padding: 10px 12px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+    .hint{
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+      margin-top: 6px;
+    }
+    .toggleRow{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      color:#333;
+      margin-top: -6px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Carga del almacén de datos</h1>
+
+    <div class="centerBox">
+      <div class="sources">
+        <div class="label">Seleccione fuente:</div>
+        <div class="checks">
+          <label class="checkRow">
+            <input type="checkbox" id="chkAll" />
+            <span>Seleccionar todas</span>
+          </label>
+
+          <label class="checkRow">
+            <input type="checkbox" class="src" value="GAL" />
+            <span>Galicia</span>
+          </label>
+
+          <label class="checkRow">
+            <input type="checkbox" class="src" value="CV" />
+            <span>Comunitat Valenciana</span>
+          </label>
+
+          <label class="checkRow">
+            <input type="checkbox" class="src" value="CAT" />
+            <span>Catalunya</span>
+          </label>
+        </div>
+      </div>
+
+      <label class="toggleRow">
+        <input type="checkbox" id="chkClearBefore" />
+        <span>Borrar almacén antes de cargar</span>
+      </label>
+
+      <div class="btnrow">
+        <button id="btnCancelar" type="button">Cancelar</button>
+        <button id="btnCargar" type="button">Cargar</button>
+        <button id="btnBorrar" type="button">Borrar almacén de datos</button>
+      </div>
+
+      <div class="resultsTitle">Resultados de la carga:</div>
+      <div class="resultsBox" id="out"></div>
+      <div class="hint" id="status"></div>
+    </div>
+  </div>
+
+<script>
+  // === AJUSTA SOLO ESTO SI CAMBIA TU PUERTO ===
+  const API_BASE = "http://127.0.0.1:8010";
+  // ===========================================
+
+  const out = document.getElementById("out");
+  const status = document.getElementById("status");
+  const chkAll = document.getElementById("chkAll");
+  const chkClearBefore = document.getElementById("chkClearBefore");
+  const srcChecks = () => Array.from(document.querySelectorAll("input.src"));
+
+  const btnCancelar = document.getElementById("btnCancelar");
+  const btnCargar = document.getElementById("btnCargar");
+  const btnBorrar = document.getElementById("btnBorrar");
+
+  function setBusy(busy){
+    btnCancelar.disabled = busy;
+    btnCargar.disabled = busy;
+    btnBorrar.disabled = busy;
+  }
+
+  function selectedSources(){
+    return srcChecks().filter(c => c.checked).map(c => c.value);
+  }
+
+  function syncAllCheckbox(){
+    const src = srcChecks();
+    const checkedCount = src.filter(c => c.checked).length;
+    chkAll.checked = (checkedCount === src.length);
+    chkAll.indeterminate = (checkedCount > 0 && checkedCount < src.length);
+  }
+
+  chkAll.addEventListener("change", () => {
+    const v = chkAll.checked;
+    srcChecks().forEach(c => c.checked = v);
+    chkAll.indeterminate = false;
+  });
+
+  srcChecks().forEach(c => c.addEventListener("change", syncAllCheckbox));
+
+  function clearUI(){
+    chkAll.checked = false;
+    chkAll.indeterminate = false;
+    srcChecks().forEach(c => c.checked = false);
+    chkClearBefore.checked = false;
+    out.textContent = "";
+    status.textContent = "";
+  }
+
+  function formatLoadResponse(data){
+    // data: { requested: [...], results: { "GAL": {ok,seconds,returncode,stdout,stderr}, ... } }
+    const lines = [];
+    const requested = Array.isArray(data?.requested) ? data.requested : [];
+    const results = data?.results ?? {};
+
+    lines.push(`Fuentes solicitadas: ${requested.join(", ") || "(ninguna)"}`);
+    lines.push("");
+
+    for (const s of requested){
+      const r = results[s] || {};
+      lines.push(`== ${s} ==`);
+      lines.push(`ok: ${Boolean(r.ok)} | seconds: ${r.seconds ?? "?"} | returncode: ${r.returncode ?? "?"}`);
+      lines.push("");
+      lines.push("stdout:");
+      lines.push((r.stdout || "").trim() || "(vacío)");
+      lines.push("");
+      lines.push("stderr:");
+      lines.push((r.stderr || "").trim() || "(vacío)");
+      lines.push("");
+      lines.push("----------------------------------------");
+    }
+
+    // Si no coincide con lo esperado, fallback
+    if (requested.length === 0) return JSON.stringify(data, null, 2);
+    return lines.join("\n");
+  }
+
+  function formatClearResponse(data){
+    // data: { cleared: true, deleted_docs: { provincias: N, localidades: N, estaciones: N } }
+    const lines = [];
+    lines.push(`Cleared: ${Boolean(data?.cleared)}`);
+    lines.push("");
+    lines.push("Documentos borrados:");
+    const dd = data?.deleted_docs ?? {};
+    for (const k of Object.keys(dd)){
+      lines.push(`- ${k}: ${dd[k]}`);
+    }
+    if (!Object.keys(dd).length) lines.push("(sin datos)");
+    return lines.join("\n");
+  }
+
+  async function callLoad(){
+    const sources = selectedSources();
+    if (!sources.length){
+      status.textContent = "Selecciona al menos una fuente.";
+      return;
+    }
+
+    setBusy(true);
+    status.textContent = "Cargando...";
+    out.textContent = "";
+
+    try{
+      const res = await fetch(`${API_BASE}/load`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sources: sources,
+          clear_before: chkClearBefore.checked
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      out.textContent = formatLoadResponse(data);
+      status.textContent = res.ok ? "Carga finalizada." : "La API devolvió un error.";
+    } catch(e){
+      status.textContent = "No se pudo conectar con la API de carga.";
+      out.textContent = "";
+    } finally{
+      setBusy(false);
+    }
+  }
+
+  async function callClear(){
+    setBusy(true);
+    status.textContent = "Borrando almacén...";
+    out.textContent = "";
+
+    try{
+      const res = await fetch(`${API_BASE}/clear`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      out.textContent = formatClearResponse(data);
+      status.textContent = res.ok ? "Almacén borrado." : "La API devolvió un error al borrar.";
+    } catch(e){
+      status.textContent = "No se pudo conectar con la API para borrar.";
+      out.textContent = "";
+    } finally{
+      setBusy(false);
+    }
+  }
+
+  btnCargar.addEventListener("click", callLoad);
+  btnBorrar.addEventListener("click", callClear);
+  btnCancelar.addEventListener("click", clearUI);
+
+  clearUI();
+</script>
+</body>
+</html>
