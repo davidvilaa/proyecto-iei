@@ -60,6 +60,17 @@ def get_starting_counter(db, collection_name: str) -> int:
         except ValueError: pass
     return max_id + 1
 
+def get_existing_names(db, collection_name: str) -> set[str]:
+    """Devuelve un conjunto (set) con los nombres de las estaciones que ya existen en la BD."""
+    existing = set()
+    # Pedimos solo el campo 'nombre' para que sea más rápido y ligero
+    docs = db.collection(collection_name).select(["nombre"]).stream()
+    for doc in docs:
+        data = doc.to_dict()
+        if "nombre" in data:
+            existing.add(data["nombre"])
+    return existing
+
 # --- FUNCIÓ CLAU PER ARREGLAR VILADECANS ---
 def ajustar_coordenada(valor_float: float, es_latitud: bool) -> float:
     """
@@ -127,6 +138,8 @@ def main():
     localidad_counter = get_starting_counter(db, "localidades")
     estacion_counter = get_starting_counter(db, "estaciones")
 
+    nombres_existentes = get_existing_names(db, "estaciones")
+
     provincia_ids = {}
     localidad_ids = {}
     estaci_vistas = {}
@@ -164,6 +177,10 @@ def main():
             nuevo_indice = count_prev + 1
             sufijo = f" {nuevo_indice}" if nuevo_indice > 1 else ""
             nombre_estacion = f"Estación de {municipio_norm}{sufijo}"
+
+            if nombre_estacion in nombres_existentes:
+                print(f"[SKIP] Datos repetidos (ya en BD): {nombre_estacion}")
+                continue
 
             # --- CÓDIGO POSTAL ---
             raw_cp = (registro.get("cp") or "").strip()

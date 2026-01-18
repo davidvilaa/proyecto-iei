@@ -50,6 +50,16 @@ def get_starting_counter(db, collection_name: str) -> int:
             pass
     return max_id + 1
 
+def get_existing_names(db, collection_name: str) -> set[str]:
+    """Devuelve un conjunto (set) con los nombres de las estaciones que ya existen en la BD."""
+    existing = set()
+    # Pedimos solo el campo 'nombre' para que sea más rápido y ligero
+    docs = db.collection(collection_name).select(["nombre"]).stream()
+    for doc in docs:
+        data = doc.to_dict()
+        if "nombre" in data:
+            existing.add(data["nombre"])
+    return existing
 
 def warn_if_empty(nombre_campo: str, valor: str, idx: int) -> None:
     if valor is None or str(valor).strip() == "":
@@ -172,6 +182,8 @@ def main():
     provincia_counter = get_starting_counter(db, "provincias")
     localidad_counter = get_starting_counter(db, "localidades")
     estacion_counter = get_starting_counter(db, "estaciones")
+    nombres_existentes = get_existing_names(db, "estaciones")
+    print(f"[INFO] Procesando {len(data_gal)} registros raw...")
 
     print(f"[INFO] Procesando {len(data_gal)} registros raw...")
 
@@ -294,6 +306,11 @@ def main():
                 nombre_estacion = (
                     f"Estación de {concello_norm}" if nuevo_indice == 1 else f"Estación de {concello_norm} {nuevo_indice}"
                 )
+
+                if nombre_estacion in nombres_existentes:
+                    print(f"[SKIP] Datos repetidos (ya en BD): {nombre_estacion}")
+                    continue
+                
                 descripcion = generar_descripcion(nombre_estacion, concello_norm, provincia_nombre or "")
 
             # Coordenadas + validación rango
