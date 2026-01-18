@@ -330,12 +330,26 @@
 
       setMeta(count);
       fillTable(estaciones);
-      fillMap(estaciones);
+      
     } catch(e){
       document.getElementById("resultsMeta").textContent =
         "Error llamando a la API (¿está levantada en 8020?).";
       document.getElementById("tablaBody").innerHTML = "";
-      clearMarkers();
+    }
+  }
+
+  async function cargarMapaCompleto(){
+    const url = `${API_BASE}/estaciones?limit=2000`; 
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const estaciones = data?.estaciones ?? [];
+      
+      // Llenamos el mapa una única vez con todo
+      fillMap(estaciones); 
+    } catch(e){
+      console.error("Error cargando el mapa completo:", e);
     }
   }
 
@@ -349,7 +363,10 @@
   document.getElementById("btnCancelar").addEventListener("click", cancelar);
 
   // Cargar TODO al iniciar
-  document.addEventListener("DOMContentLoaded", () => buscar());
+  document.addEventListener("DOMContentLoaded", () => {
+    cargarMapaCompleto(); // Pinta todos los puntos
+    buscar();             // Pinta la tabla (inicialmente con todo también)
+  })
 </script>
 </body>
 </html>
