@@ -1,4 +1,4 @@
-![estacionesITV]([https://i.ibb.co/1tFZ3pYV/rr.png](https://i.ibb.co/xKhd4XY7/iei.png))
+![estacionesITV](https://i.ibb.co/xKhd4XY7/iei.png)
 
 # 🚗 estacionesITV: Data Integration & Interoperability
 
