@@ -1,3 +1,5 @@
+![estacionesITV]([https://i.ibb.co/1tFZ3pYV/rr.png](https://i.ibb.co/xKhd4XY7/iei.png))
+
 # 🚗 estacionesITV: Data Integration & Interoperability
 
 <p align="center">
@@ -16,9 +18,26 @@ This is a 4th-year university project developed for the Data Integration and Int
 
 ### Key Features
 
-*   **Data Wrappers & Extractors:** Custom Python scripts designed to parse and extract data from three different sources.
-*   **Format Normalization:** Capable of handling and unifying multiple raw data formats (such as `XML` and `CSV`) into a single standardized structure.
-*   **Interactive Web Map:** A pure HTML frontend that consumes the integrated data and plots the station locations on an interactive map.
+<details>
+  <summary><strong>📊 Data Wrappers & Extractors</strong></summary>
+  <br>
+  Custom Python scripts designed to parse and extract data from three different sources.
+  <br><br>
+</details>
+
+<details>
+  <summary><strong>📋 Format Normalization</strong></summary>
+  <br>
+  Capable of handling and unifying multiple raw data formats (such as `XML` and `CSV`) into a single standardized structure.
+  <br><br>
+</details>
+
+<details>
+  <summary><strong>🗺️ Interactive Web Map</strong></summary>
+  <br>
+  A pure HTML frontend that consumes the integrated data and plots the station locations on an interactive map.
+  <br><br>
+</details>
 
 ---
 
@@ -36,14 +55,14 @@ If you want to run the data integration pipeline and view the web map locally:
 
 1. **Clone the repository:**
 ```bash
-   git clone [https://github.com/davidvilaa/estacionesITV.git](https://github.com/davidvilaa/estacionesITV.git)
-   cd estacionesITV
+   git clone [https://github.com/davidvilaa/proyecto-iei.git](https://github.com/davidvilaa/proyecto-iei.git)
+   cd proyecto-iei
    ```
 
-2. **Run the Wrappers:**
-   Execute the Python wrapper scripts to extract and normalize the data from the different sources.
-```bash
-   python main.py
+2. **Run the startup script:**
+   The project includes a PowerShell script that initializes the necessary modules, APIs, and executes the wrappers automatically. Open your PowerShell terminal and run:
+```powershell
+   .\start_all.ps1
    ```
 
 3. **Open the User Interface:**
