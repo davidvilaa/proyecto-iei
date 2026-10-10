@@ -55,7 +55,7 @@ If you want to run the data integration pipeline and view the web map locally:
 
 1. **Clone the repository:**
 ```bash
-   git clone [https://github.com/davidvilaa/proyecto-iei.git](https://github.com/davidvilaa/proyecto-iei.git)
+   git clone https://github.com/davidvilaa/proyecto-iei.git
    cd proyecto-iei
    ```
 
